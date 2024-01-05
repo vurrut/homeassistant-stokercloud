@@ -7,6 +7,6 @@
   "config_flow": true,
   "dependencies": ["http"],
   "codeowners": ["vurrut"],
-  "requirements": ["git+https://github.com/vurrut/stokercloud-client.git#stokercloud==0.0.6"],
+  "requirements": ["git+https://github.com/vurrut/stokercloud-client.git#stokercloud==0.0.7"],
   "iot_class": "cloud_polling"
 }
