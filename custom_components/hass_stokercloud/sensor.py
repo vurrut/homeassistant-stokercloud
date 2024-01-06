@@ -47,28 +47,7 @@ async def async_setup_entry(hass, config, async_add_entities):
     ])
 
 
-    @property
-    def output_percentage(self):
-        """Return the value reported by the sensor."""
-        if self._state and isinstance(self._state, Value):
-            return self._state.value
-
-    @property
-    def hopper_distance(self):
-        """Return the value reported by the sensor."""
-        if self._state and isinstance(self._state, Value):
-            return self._state.value
-
-    @property
-    def state_class(self):
-        """Return the state class of the sensor."""
-        if self._attr_state_class:
-            return self._attr_state_class
-        # Add more conditions based on your requirements
-        elif self._client_key == 'output_percentage':
-            return STATE_CLASS_MEASUREMENT
-        elif self._client_key == 'hopper_distance':
-            return STATE_CLASS_TOTAL
+   
 
 
 class StokerCloudControllerBinarySensor(StokerCloudControllerMixin, BinarySensorEntity):
@@ -118,3 +97,26 @@ class StokerCloudControllerSensor(StokerCloudControllerMixin, SensorEntity):
                 Unit.DEGREE: TEMP_CELSIUS,
                 Unit.KILO_GRAM: MASS_KILOGRAMS,
             }.get(self._state.unit)
+        
+    @property
+    def output_percentage(self):
+        """Return the value reported by the sensor."""
+        if self._state and isinstance(self._state, Value):
+            return self._state.value
+
+    @property
+    def hopper_distance(self):
+        """Return the value reported by the sensor."""
+        if self._state and isinstance(self._state, Value):
+            return self._state.value
+
+    @property
+    def state_class(self):
+        """Return the state class of the sensor."""
+        if self._attr_state_class:
+            return self._attr_state_class
+        # Add more conditions based on your requirements
+        elif self._client_key == 'output_percentage':
+            return STATE_CLASS_MEASUREMENT
+        elif self._client_key == 'hopper_distance':
+            return STATE_CLASS_TOTAL
