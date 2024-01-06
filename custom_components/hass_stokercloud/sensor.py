@@ -14,6 +14,8 @@ from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
 from stokercloud.controller_data import PowerState, Unit, Value
 from stokercloud.client import Client as StokerCloudClient
+from homeassistant.components.sensor import STATE_CLASS_MEASUREMENT
+from homeassistant.components.sensor import STATE_CLASS_TOTAL
 
 
 import datetime
@@ -39,13 +41,34 @@ async def async_setup_entry(hass, config, async_add_entities):
         StokerCloudControllerSensor(client, serial, 'Boiler Effect', 'boiler_kwh', SensorDeviceClass.POWER),
         StokerCloudControllerSensor(client, serial, 'Total Consumption', 'consumption_total', state_class=SensorStateClass.TOTAL_INCREASING), # state class STATE_CLASS_TOTAL_INCREASING
         StokerCloudControllerSensor(client, serial, 'State', 'state'),
-        StokerCloudControllerSensor(client, serial, 'hopper amount', 'hopper_amount'),
         StokerCloudControllerSensor(client, serial, 'boiler Photo sensor ', 'boiler_photosensor'),
-        StokerCloudControllerSensor(client, serial, 'boiler_percent', 'boiler_percent'),
+        StokerCloudControllerSensor(client, serial, 'Output Percentage', 'output_percentage', state_class=STATE_CLASS_MEASUREMENT),
+        StokerCloudControllerSensor(client, serial, 'Hopper Distance', 'hopper_distance', state_class=STATE_CLASS_TOTAL),
     ])
 
 
+    @property
+    def output_percentage(self):
+        """Return the value reported by the sensor."""
+        if self._state and isinstance(self._state, Value):
+            return self._state.value
 
+    @property
+    def hopper_distance(self):
+        """Return the value reported by the sensor."""
+        if self._state and isinstance(self._state, Value):
+            return self._state.value
+
+    @property
+    def state_class(self):
+        """Return the state class of the sensor."""
+        if self._attr_state_class:
+            return self._attr_state_class
+        # Add more conditions based on your requirements
+        elif self._client_key == 'output_percentage':
+            return STATE_CLASS_MEASUREMENT
+        elif self._client_key == 'hopper_distance':
+            return STATE_CLASS_TOTAL
 
 
 class StokerCloudControllerBinarySensor(StokerCloudControllerMixin, BinarySensorEntity):
