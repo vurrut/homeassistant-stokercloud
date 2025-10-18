@@ -1,6 +1,6 @@
 """NBE Stoker Cloud."""
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.typing import ConfigType
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .const import DOMAIN, PLATFORMS
 from homeassistant.config_entries import ConfigEntry
 from stokercloud.client import Client as StokerCloudClient
@@ -15,9 +15,12 @@ async def async_setup(hass: HomeAssistant, config: dict):
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Set up from a config entry."""
-    hass.data[DOMAIN][entry.entry_id] = StokerCloudClient(entry.data[CONF_USERNAME])
+    # Get aiohttp session and create client
+    session = async_get_clientsession(hass)
+    client = StokerCloudClient(entry.data[CONF_USERNAME], session)
+    hass.data[DOMAIN][entry.entry_id] = client
     
-    # Fixed: Correct way to forward entry setups
+    # Forward entry setups
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     
     return True
@@ -28,6 +31,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     
     if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id)
+        client = hass.data[DOMAIN].pop(entry.entry_id)
+        await client.close()
     
     return unload_ok

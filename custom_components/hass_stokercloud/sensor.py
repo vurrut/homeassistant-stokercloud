@@ -36,11 +36,21 @@ async def async_setup_entry(hass, config, async_add_entities):
     client = hass.data[DOMAIN][config.entry_id]
     serial = config.data[CONF_USERNAME]
     async_add_entities([
+        # Binary Sensors
         StokerCloudControllerBinarySensor(client, serial, 'Running', 'running', BinarySensorDeviceClass.RUNNING),
         StokerCloudControllerBinarySensor(client, serial, 'Alarm', 'alarm', BinarySensorDeviceClass.PROBLEM),
+        StokerCloudControllerBinarySensor(client, serial, 'Circulate Pump', 'output_pump', BinarySensorDeviceClass.RUNNING),
+        
+        # Temperature Sensors
         StokerCloudControllerSensor(client, serial, 'Boiler Temperature', 'boiler_temperature_current', SensorDeviceClass.TEMPERATURE),
         StokerCloudControllerSensor(client, serial, 'Boiler Temperature Requested', 'boiler_temperature_requested', SensorDeviceClass.TEMPERATURE),
+        StokerCloudControllerSensor(client, serial, 'Boiler Temp (Front)', 'boilertemp', SensorDeviceClass.TEMPERATURE),
+        StokerCloudControllerSensor(client, serial, 'DHW Temperature', 'dhw', SensorDeviceClass.TEMPERATURE),
+        
+        # Power Sensors
         StokerCloudControllerSensor(client, serial, 'Boiler Effect', 'boiler_kwh', SensorDeviceClass.POWER),
+        
+        # Other Sensors
         StokerCloudControllerSensor(client, serial, 'Total Consumption', 'consumption_total', state_class=SensorStateClass.TOTAL_INCREASING),
         StokerCloudControllerSensor(client, serial, 'State', 'state'),
         StokerCloudControllerSensor(client, serial, 'Boiler Photo Sensor', 'boiler_photosensor'),
