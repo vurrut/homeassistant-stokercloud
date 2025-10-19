@@ -7,7 +7,7 @@ from homeassistant.const import Platform
 DOMAIN = "hass_stokercloud"
 
 # Platforms
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.CLIMATE]
+PLATFORMS = ["sensor", "binary_sensor", "number"] 
 
 # API Configuration
 API_BASE_URL = "https://stokercloud.dk/v3/data"
