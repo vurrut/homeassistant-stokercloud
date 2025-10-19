@@ -1,12 +1,15 @@
 {
   "domain": "hass_stokercloud",
-  "name": "NBE Stoker Cloud",
-  "version": "0.0.12",
-  "documentation": "https://github.com/vurrut/homeassistant-stokercloud",
-  "issue_tracker": "https://github.com/vurrut/homeassistant-stokercloud/issues",
+  "name": "Stokercloud",
+  "codeowners": ["@vurrut"],
   "config_flow": true,
-  "dependencies": ["http"],
-  "codeowners": ["vurrut"],
-  "requirements": ["git+https://github.com/vurrut/stokercloud-client.git#stokercloud==0.0.10"],
-  "iot_class": "cloud_polling"
+  "dependencies": [],
+  "documentation": "https://github.com/vurrut/homeassistant-stokercloud",
+  "integration_type": "device",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/vurrut/homeassistant-stokercloud/issues",
+  "requirements": [
+    "stokercloud-client==2.0.1"
+  ],
+  "version": "2.0.0"
 }

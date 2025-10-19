@@ -1,0 +1,36 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up Stokercloud",
+        "description": "Enter your Stokercloud username. You can find it in your Stokercloud URL: https://stokercloud.dk/v3/#/USERNAME/main-page",
+        "data": {
+          "username": "Username"
+        },
+        "data_description": {
+          "username": "Your Stokercloud username)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to Stokercloud API. Please check your username and internet connection.",
+      "invalid_auth": "Invalid authentication credentials.",
+      "unknown": "Unexpected error occurred. Please check the logs for more details."
+    },
+    "abort": {
+      "already_configured": "This Stokercloud account is already configured.",
+      "reauth_successful": "Re-authentication was successful."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Configure Stokercloud Options",
+        "description": "Adjust settings for your Stokercloud integration.",
+        "data": {
+          "scan_interval": "Update interval (seconds)"
+        }
+      }
+    }
+  }
+}
