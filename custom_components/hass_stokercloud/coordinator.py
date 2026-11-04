@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from datetime import timedelta
 import logging
 from typing import Any
 
@@ -19,11 +20,16 @@ from stokercloud import (
     StokerCloudError,
 )
 
-from .const import DOMAIN, MENU_REFRESH_EVERY, SCAN_INTERVAL
+from .const import (
+    CONF_SCAN_INTERVAL,
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
+    MENU_REFRESH_EVERY,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
-MENUS = ("boiler", "hot_water")
+MENUS = ("boiler", "hot_water", "hopper")
 
 
 @dataclass
@@ -52,7 +58,9 @@ class StokerCloudCoordinator(DataUpdateCoordinator[StokerCloudData]):
             _LOGGER,
             config_entry=entry,
             name=DOMAIN,
-            update_interval=SCAN_INTERVAL,
+            update_interval=timedelta(
+                seconds=entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+            ),
         )
         self.client = client
         self._settings: dict[str, dict[str, Any]] = {}

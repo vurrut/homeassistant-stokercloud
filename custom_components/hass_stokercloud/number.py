@@ -12,7 +12,7 @@ from homeassistant.components.number import (
     NumberEntityDescription,
     NumberMode,
 )
-from homeassistant.const import UnitOfTemperature
+from homeassistant.const import EntityCategory, UnitOfMass, UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -61,6 +61,21 @@ NUMBERS: tuple[StokerCloudNumberDescription, ...] = (
         native_step=1,
         mode=NumberMode.BOX,
         icon="mdi:water-boiler",
+    ),
+    StokerCloudNumberDescription(
+        key="Hopper Content Setting",
+        name="Hopper Content",
+        setting="hopper.content",
+        value_fn=lambda cd: cd.hoppercontent,
+        set_fn=lambda client, v: client.async_set_value("hopper.content", int(v)),
+        device_class=NumberDeviceClass.WEIGHT,
+        native_unit_of_measurement=UnitOfMass.KILOGRAMS,
+        native_min_value=-30000,
+        native_max_value=30000,
+        native_step=1,
+        mode=NumberMode.BOX,
+        entity_category=EntityCategory.CONFIG,
+        icon="mdi:silo",
     ),
 )
 

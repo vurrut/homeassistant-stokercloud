@@ -15,7 +15,15 @@ PLATFORMS: list[Platform] = [
     Platform.BUTTON,
 ]
 
-SCAN_INTERVAL = timedelta(seconds=60)
+CONF_SCAN_INTERVAL = "scan_interval"
+CONF_CALORIFIC_VALUE = "calorific_value"
+
+DEFAULT_SCAN_INTERVAL = 60  # seconds
+MIN_SCAN_INTERVAL = 30
+# Typical net calorific value of EN-plus wood pellets (kWh per kg)
+DEFAULT_CALORIFIC_VALUE = 4.8
+
+SCAN_INTERVAL = timedelta(seconds=DEFAULT_SCAN_INTERVAL)
 # Settings limits change rarely; refresh them every N data updates.
 MENU_REFRESH_EVERY = 30
 

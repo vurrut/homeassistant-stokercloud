@@ -1,0 +1,21 @@
+set_value:
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: hass_stokercloud
+    setting:
+      required: true
+      example: boiler.diff_under
+      selector:
+        text:
+    value:
+      required: true
+      example: 5
+      selector:
+        number:
+          min: -30000
+          max: 30000
+          step: any
+          mode: box

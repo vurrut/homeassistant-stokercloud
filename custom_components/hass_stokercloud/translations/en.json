@@ -26,5 +26,40 @@
       "already_configured": "This StokerCloud account is already configured.",
       "reauth_successful": "Re-authentication was successful."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "NBE StokerCloud options",
+        "data": {
+          "scan_interval": "Update interval (seconds)",
+          "calorific_value": "Pellet calorific value (kWh/kg)"
+        },
+        "data_description": {
+          "scan_interval": "How often to poll StokerCloud. Minimum 30 seconds.",
+          "calorific_value": "Used for the Pellet Energy sensor. EN-plus wood pellets are about 4.8 kWh/kg."
+        }
+      }
+    }
+  },
+  "services": {
+    "set_value": {
+      "name": "Set controller value",
+      "description": "Write any numeric controller setting, like the StokerCloud web settings pages do. The value is checked against the min/max the controller reports.",
+      "fields": {
+        "config_entry_id": {
+          "name": "StokerCloud entry",
+          "description": "Only needed when more than one StokerCloud account is configured."
+        },
+        "setting": {
+          "name": "Setting",
+          "description": "Setting id, for example boiler.temp, boiler.diff_under, hot_water.diff_under, hopper.content or regulation.boiler_power_max."
+        },
+        "value": {
+          "name": "Value",
+          "description": "New value, in the unit shown on the StokerCloud website."
+        }
+      }
+    }
   }
 }

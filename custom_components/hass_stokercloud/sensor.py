@@ -14,6 +14,7 @@ from homeassistant.components.sensor import (
 from homeassistant.const import (
     PERCENTAGE,
     EntityCategory,
+    UnitOfEnergy,
     UnitOfMass,
     UnitOfPower,
     UnitOfPressure,
@@ -24,7 +25,8 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from stokercloud import STATE_LABELS, ControllerData, Value
 
-from .coordinator import StokerCloudConfigEntry
+from .const import CONF_CALORIFIC_VALUE, DEFAULT_CALORIFIC_VALUE
+from .coordinator import StokerCloudConfigEntry, StokerCloudCoordinator
 from .entity import StokerCloudEntity
 
 
@@ -42,11 +44,16 @@ class StokerCloudSensorDescription(SensorEntityDescription):
     attrs_fn: Callable[[ControllerData], dict[str, Any]] | None = None
 
 
-def _temp(key: str, attr: str, **kw: Any) -> StokerCloudSensorDescription:
+def _temp(
+    key: str,
+    attr: str,
+    value_fn_override: Callable[[ControllerData], Any] | None = None,
+    **kw: Any,
+) -> StokerCloudSensorDescription:
     return StokerCloudSensorDescription(
         key=key,
         name=key,
-        value_fn=_v(attr),
+        value_fn=value_fn_override or _v(attr),
         device_class=SensorDeviceClass.TEMPERATURE,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
@@ -148,7 +155,57 @@ SENSORS: tuple[StokerCloudSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfPressure.PA,
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
+    StokerCloudSensorDescription(
+        key="Hopper Content",
+        name="Hopper Content",
+        value_fn=_v("hoppercontent"),
+        device_class=SensorDeviceClass.WEIGHT,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfMass.KILOGRAMS,
+        icon="mdi:silo",
+    ),
 )
+
+PELLET_ENERGY = SensorEntityDescription(
+    key="Pellet Energy",
+    name="Pellet Energy",
+    device_class=SensorDeviceClass.ENERGY,
+    state_class=SensorStateClass.TOTAL_INCREASING,
+    native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+    suggested_display_precision=0,
+    icon="mdi:fire",
+)
+
+
+def _zone_value(zone: int, field: str) -> Callable[[ControllerData], Any]:
+    def get(cd: ControllerData) -> Any:
+        item = (cd.raw.get("weathercomp") or {}).get(f"zone{zone}-{field}") or {}
+        try:
+            return float(item.get("val"))
+        except (TypeError, ValueError):
+            return None
+
+    return get
+
+
+def _zone_sensors(zone: int) -> tuple[StokerCloudSensorDescription, ...]:
+    return (
+        _temp(f"Zone {zone} Wanted Temperature", "", value_fn_override=_zone_value(zone, "wanted")),
+        _temp(f"Zone {zone} Forward Temperature", "", value_fn_override=_zone_value(zone, "actual")),
+        StokerCloudSensorDescription(
+            key=f"Zone {zone} Valve",
+            name=f"Zone {zone} Valve",
+            value_fn=_zone_value(zone, "valve"),
+            state_class=SensorStateClass.MEASUREMENT,
+            native_unit_of_measurement=PERCENTAGE,
+            icon="mdi:valve",
+        ),
+    )
+
+
+def _active_zones(cd: ControllerData) -> list[int]:
+    wc = cd.raw.get("weathercomp") or {}
+    return [z for z in range(1, 5) if str(wc.get(f"zone{z}active")) == "1"]
 
 
 async def async_setup_entry(
@@ -157,7 +214,18 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator = entry.runtime_data
-    async_add_entities(StokerCloudSensor(coordinator, desc) for desc in SENSORS)
+    descriptions = list(SENSORS)
+    for zone in _active_zones(coordinator.data.controller):
+        descriptions.extend(_zone_sensors(zone))
+    entities: list[SensorEntity] = [StokerCloudSensor(coordinator, d) for d in descriptions]
+    entities.append(
+        StokerCloudPelletEnergySensor(
+            coordinator,
+            PELLET_ENERGY,
+            entry.options.get(CONF_CALORIFIC_VALUE, DEFAULT_CALORIFIC_VALUE),
+        )
+    )
+    async_add_entities(entities)
 
 
 class StokerCloudSensor(StokerCloudEntity, SensorEntity):
@@ -175,3 +243,30 @@ class StokerCloudSensor(StokerCloudEntity, SensorEntity):
         if self.entity_description.attrs_fn is None:
             return None
         return self.entity_description.attrs_fn(self.coordinator.data.controller)
+
+
+class StokerCloudPelletEnergySensor(StokerCloudEntity, SensorEntity):
+    """Fuel energy burned: total pellet consumption x calorific value.
+
+    Add it to the Energy dashboard (as gas/fuel) and set a price per kWh there.
+    """
+
+    def __init__(
+        self,
+        coordinator: StokerCloudCoordinator,
+        description: SensorEntityDescription,
+        calorific_value: float,
+    ) -> None:
+        super().__init__(coordinator, description)
+        self._calorific_value = calorific_value
+
+    @property
+    def native_value(self) -> float | None:
+        kg = _v("consumption_total")(self.coordinator.data.controller)
+        if not isinstance(kg, (int, float)) or kg < 0:
+            return None
+        return round(kg * self._calorific_value, 1)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"calorific_value_kwh_per_kg": self._calorific_value}
