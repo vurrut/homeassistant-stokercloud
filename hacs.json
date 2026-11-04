@@ -1,8 +1,5 @@
 {
-    "name": "NBE Stoker Cloud",
-    "domains": [
-        "sensor"
-    ],
-    "render_readme": true,
-    "homeassistant": "2024.1.0"
+  "name": "NBE Stoker Cloud",
+  "render_readme": true,
+  "homeassistant": "2024.11.0"
 }

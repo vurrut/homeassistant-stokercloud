@@ -1,120 +1,177 @@
-"""Platform for sensor integration."""
+"""Sensors for NBE StokerCloud."""
 from __future__ import annotations
 
-from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any
+
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorEntityDescription,
+    SensorStateClass,
+)
 from homeassistant.const import (
-    CONF_USERNAME,
-    UnitOfPower,
-    UnitOfTemperature,
+    PERCENTAGE,
+    EntityCategory,
     UnitOfMass,
+    UnitOfPower,
+    UnitOfPressure,
+    UnitOfTemperature,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.config_entries import ConfigEntry
 
-from stokercloud.controller_data import Unit, Value
-from stokercloud.client import Client as StokerCloudClient
+from stokercloud import STATE_LABELS, ControllerData, Value
 
-import datetime
-from .const import DOMAIN
-from .mixins import StokerCloudControllerMixin
+from .coordinator import StokerCloudConfigEntry
+from .entity import StokerCloudEntity
 
-import logging
 
-logger = logging.getLogger(__name__)
+def _v(attr: str) -> Callable[[ControllerData], Any]:
+    def get(cd: ControllerData) -> Any:
+        val = getattr(cd, attr, None)
+        return val.value if isinstance(val, Value) else val
 
-MIN_TIME_BETWEEN_UPDATES = datetime.timedelta(minutes=1)
+    return get
+
+
+@dataclass(frozen=True, kw_only=True)
+class StokerCloudSensorDescription(SensorEntityDescription):
+    value_fn: Callable[[ControllerData], Any]
+    attrs_fn: Callable[[ControllerData], dict[str, Any]] | None = None
+
+
+def _temp(key: str, attr: str, **kw: Any) -> StokerCloudSensorDescription:
+    return StokerCloudSensorDescription(
+        key=key,
+        name=key,
+        value_fn=_v(attr),
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        **kw,
+    )
+
+
+STATE_OPTIONS = sorted(set(STATE_LABELS.values()))
+
+SENSORS: tuple[StokerCloudSensorDescription, ...] = (
+    # --- keys/names below exist since v1/v2: do not rename (unique_id) ---
+    _temp("Boiler Temperature", "boilertemp"),
+    _temp("Boiler Temperature Requested", "wantedboilertemp"),
+    _temp("DHW Temperature", "dhw"),
+    StokerCloudSensorDescription(
+        key="Boiler Effect",
+        name="Boiler Effect",
+        value_fn=_v("boiler_kwh"),
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPower.KILO_WATT,
+    ),
+    StokerCloudSensorDescription(
+        key="Total Consumption",
+        name="Total Consumption",
+        value_fn=_v("consumption_total"),
+        device_class=SensorDeviceClass.WEIGHT,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        native_unit_of_measurement=UnitOfMass.KILOGRAMS,
+        icon="mdi:grain",
+    ),
+    StokerCloudSensorDescription(
+        key="State",
+        name="State",
+        value_fn=lambda cd: cd.state_label if cd.state_label in STATE_OPTIONS else None,
+        attrs_fn=lambda cd: {"code": cd.state_raw, "substate": cd.substate_raw},
+        device_class=SensorDeviceClass.ENUM,
+        options=STATE_OPTIONS,
+        icon="mdi:fire",
+    ),
+    StokerCloudSensorDescription(
+        key="Boiler Photo Sensor",
+        name="Boiler Photo Sensor",
+        value_fn=_v("boiler_photosensor"),
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:brightness-6",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    StokerCloudSensorDescription(
+        key="Output Percentage",
+        name="Output Percentage",
+        value_fn=_v("output_percentage"),
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=PERCENTAGE,
+        icon="mdi:gauge",
+    ),
+    StokerCloudSensorDescription(
+        key="Hopper Distance",
+        name="Hopper Distance",
+        value_fn=_v("hopper_distance"),
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:arrow-expand-vertical",
+    ),
+    # --- new in v3 ---
+    _temp("DHW Temperature Requested", "dhwwanted"),
+    _temp("Smoke Temperature", "smoketemp"),
+    _temp("Outdoor Temperature", "outdoor_temperature"),
+    StokerCloudSensorDescription(
+        key="Oxygen",
+        name="Oxygen",
+        value_fn=_v("oxygen"),
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=PERCENTAGE,
+        icon="mdi:molecule",
+    ),
+    StokerCloudSensorDescription(
+        key="Boiler Power",
+        name="Boiler Power",
+        value_fn=_v("boiler_power_pct"),
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=PERCENTAGE,
+        icon="mdi:fire-circle",
+    ),
+    StokerCloudSensorDescription(
+        key="Consumption 24h",
+        name="Consumption 24h",
+        value_fn=_v("consumption_day"),
+        device_class=SensorDeviceClass.WEIGHT,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfMass.KILOGRAMS,
+        icon="mdi:grain",
+    ),
+    StokerCloudSensorDescription(
+        key="Chamber Pressure",
+        name="Chamber Pressure",
+        value_fn=_v("pressure"),
+        device_class=SensorDeviceClass.PRESSURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPressure.PA,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+)
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: StokerCloudConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the sensor platform."""
-    client = hass.data[DOMAIN][entry.entry_id]
-    serial = entry.data[CONF_USERNAME]
-    
-    async_add_entities([
-        # Temperature Sensors (with explicit unit)
-        StokerCloudControllerSensor(
-            client, serial, 'Boiler Temperature', 'boiler_temperature_current', 
-            SensorDeviceClass.TEMPERATURE, default_unit=UnitOfTemperature.CELSIUS
-        ),
-        StokerCloudControllerSensor(
-            client, serial, 'Boiler Temperature Requested', 'boiler_temperature_requested', 
-            SensorDeviceClass.TEMPERATURE, default_unit=UnitOfTemperature.CELSIUS
-        ),
-        StokerCloudControllerSensor(
-            client, serial, 'Boiler Temp (Front)', 'boilertemp', 
-            SensorDeviceClass.TEMPERATURE, default_unit=UnitOfTemperature.CELSIUS
-        ),
-        StokerCloudControllerSensor(
-            client, serial, 'Wanted Boiler Temperature', 'wantedboilertemp', 
-            SensorDeviceClass.TEMPERATURE, default_unit=UnitOfTemperature.CELSIUS
-        ),
-        StokerCloudControllerSensor(
-            client, serial, 'DHW Temperature', 'dhw', 
-            SensorDeviceClass.TEMPERATURE, default_unit=UnitOfTemperature.CELSIUS
-        ),
-        
-        # Power Sensors (with explicit unit)
-        StokerCloudControllerSensor(
-            client, serial, 'Boiler Effect', 'boiler_kwh', 
-            SensorDeviceClass.POWER, default_unit=UnitOfPower.KILO_WATT
-        ),
-        
-        # Other Sensors
-        StokerCloudControllerSensor(
-            client, serial, 'Total Consumption', 'consumption_total', 
-            state_class=SensorStateClass.TOTAL_INCREASING
-        ),
-        StokerCloudControllerSensor(client, serial, 'State', 'state'),
-        StokerCloudControllerSensor(client, serial, 'Boiler Photo Sensor', 'boiler_photosensor'),
-        StokerCloudControllerSensor(client, serial, 'Output Percentage', 'output_percentage'),
-        StokerCloudControllerSensor(client, serial, 'Hopper Distance', 'hopper_distance'),
-    ])
+    coordinator = entry.runtime_data
+    async_add_entities(StokerCloudSensor(coordinator, desc) for desc in SENSORS)
 
 
-class StokerCloudControllerSensor(StokerCloudControllerMixin, SensorEntity):
-    """Representation of a Sensor."""
-
-    def __init__(
-        self, 
-        client: StokerCloudClient, 
-        serial: str, 
-        name: str, 
-        client_key: str, 
-        device_class: SensorDeviceClass = None, 
-        state_class: SensorStateClass = None,
-        default_unit: str = None
-    ):
-        """Initialize the sensor."""
-        super().__init__(client, serial, name, client_key)
-        self._attr_device_class = device_class
-        self._attr_state_class = state_class
-        self._default_unit = default_unit
+class StokerCloudSensor(StokerCloudEntity, SensorEntity):
+    entity_description: StokerCloudSensorDescription
 
     @property
-    def native_value(self):
-        """Return the value reported by the sensor."""
-        if self._state:
-            if isinstance(self._state, Value):
-                return self._state.value
-            return self._state
-        return None
+    def native_value(self) -> Any:
+        value = self.entity_description.value_fn(self.coordinator.data.controller)
+        if self.entity_description.device_class == SensorDeviceClass.ENUM:
+            return value
+        return value if isinstance(value, (int, float)) else None
 
     @property
-    def native_unit_of_measurement(self):
-        """Return the unit of measurement."""
-        # If state has a unit, use it
-        if self._state and isinstance(self._state, Value) and self._state.unit:
-            unit_map = {
-                Unit.KWH: UnitOfPower.KILO_WATT,
-                Unit.DEGREE: UnitOfTemperature.CELSIUS,
-                Unit.KILO_GRAM: UnitOfMass.KILOGRAMS,
-            }
-            return unit_map.get(self._state.unit)
-        
-        # Otherwise use the default unit
-        return self._default_unit
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        if self.entity_description.attrs_fn is None:
+            return None
+        return self.entity_description.attrs_fn(self.coordinator.data.controller)

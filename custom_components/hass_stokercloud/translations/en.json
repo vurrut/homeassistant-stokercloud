@@ -2,35 +2,29 @@
   "config": {
     "step": {
       "user": {
-        "title": "Set up Stokercloud",
-        "description": "Enter your Stokercloud username. You can find it in your Stokercloud URL: https://stokercloud.dk/v3/#/USERNAME/main-page",
+        "title": "Set up NBE StokerCloud",
+        "description": "Use the same user name and password you use on https://v16.stokercloud.dk/. The password is required: it gives the integration full access so it can change setpoints.",
         "data": {
-          "username": "Username"
-        },
-        "data_description": {
-          "username": "Your Stokercloud username)"
+          "username": "Username",
+          "password": "Password"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-enter StokerCloud password",
+        "description": "Enter the StokerCloud password for {username}. From version 3 the integration only uses the authenticated (user + password) API.",
+        "data": {
+          "password": "Password"
         }
       }
     },
     "error": {
-      "cannot_connect": "Failed to connect to Stokercloud API. Please check your username and internet connection.",
-      "invalid_auth": "Invalid authentication credentials.",
-      "unknown": "Unexpected error occurred. Please check the logs for more details."
+      "cannot_connect": "Failed to connect to StokerCloud.",
+      "invalid_auth": "Wrong user name or password, or the account has no write access.",
+      "unknown": "Unexpected error. Check the logs for details."
     },
     "abort": {
-      "already_configured": "This Stokercloud account is already configured.",
+      "already_configured": "This StokerCloud account is already configured.",
       "reauth_successful": "Re-authentication was successful."
-    }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "title": "Configure Stokercloud Options",
-        "description": "Adjust settings for your Stokercloud integration.",
-        "data": {
-          "scan_interval": "Update interval (seconds)"
-        }
-      }
     }
   }
 }

@@ -1,33 +1,45 @@
-"""NBE Stoker Cloud."""
+"""NBE StokerCloud integration."""
+from __future__ import annotations
+
+import logging
+
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.typing import ConfigType
-from .const import DOMAIN, PLATFORMS
-from homeassistant.config_entries import ConfigEntry
-from stokercloud.client import Client as StokerCloudClient
-from homeassistant.const import CONF_USERNAME
+from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+from stokercloud import Client, StokerCloudAuthError
+
+from .const import PLATFORMS
+from .coordinator import StokerCloudConfigEntry, StokerCloudCoordinator
+
+_LOGGER = logging.getLogger(__name__)
 
 
-async def async_setup(hass: HomeAssistant, config: dict):
-    """Set up the component."""
-    hass.data[DOMAIN] = {}
-    return True
+async def async_setup_entry(hass: HomeAssistant, entry: StokerCloudConfigEntry) -> bool:
+    """Set up StokerCloud from a config entry."""
+    password = entry.data.get(CONF_PASSWORD)
+    if not password:
+        # Entries created by v1/v2 may only have a username: ask for the password.
+        raise ConfigEntryAuthFailed("A StokerCloud password is now required")
 
+    try:
+        client = Client(
+            entry.data[CONF_USERNAME],
+            async_get_clientsession(hass),
+            password=password,
+        )
+    except StokerCloudAuthError as err:
+        raise ConfigEntryAuthFailed(str(err)) from err
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
-    """Set up from a config entry."""
-    hass.data[DOMAIN][entry.entry_id] = StokerCloudClient(entry.data[CONF_USERNAME])
-    
-    # Fixed: Correct way to forward entry setups
+    coordinator = StokerCloudCoordinator(hass, entry, client)
+    await coordinator.async_config_entry_first_refresh()
+    entry.runtime_data = coordinator
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
+async def async_unload_entry(hass: HomeAssistant, entry: StokerCloudConfigEntry) -> bool:
     """Unload a config entry."""
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    
-    if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id)
-    
-    return unload_ok
+    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
