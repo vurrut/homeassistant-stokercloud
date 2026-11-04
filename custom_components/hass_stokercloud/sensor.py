@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -26,7 +27,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from stokercloud import STATE_LABELS, ControllerData, Value
 
 from .const import CONF_CALORIFIC_VALUE, DEFAULT_CALORIFIC_VALUE
-from .coordinator import StokerCloudConfigEntry, StokerCloudCoordinator
+from .coordinator import StokerCloudConfigEntry, StokerCloudCoordinator, StokerCloudData
 from .entity import StokerCloudEntity
 
 
@@ -40,8 +41,11 @@ def _v(attr: str) -> Callable[[ControllerData], Any]:
 
 @dataclass(frozen=True, kw_only=True)
 class StokerCloudSensorDescription(SensorEntityDescription):
-    value_fn: Callable[[ControllerData], Any]
+    value_fn: Callable[[ControllerData], Any] = lambda cd: None
     attrs_fn: Callable[[ControllerData], dict[str, Any]] | None = None
+    # Sensors computed from the whole snapshot (history etc.) instead of live data
+    data_fn: Callable[[StokerCloudData], Any] | None = None
+    last_reset_fn: Callable[[StokerCloudData], datetime | None] | None = None
 
 
 def _temp(
@@ -166,6 +170,52 @@ SENSORS: tuple[StokerCloudSensorDescription, ...] = (
     ),
 )
 
+def _days_left(data: StokerCloudData) -> float | None:
+    content = _v("hoppercontent")(data.controller)
+    avg = data.history.avg_daily_7d
+    if not isinstance(content, (int, float)) or content < 0 or not avg:
+        return None
+    return round(content / avg, 1)
+
+
+def _kg_total(key: str, attr: str, reset_attr: str | None, icon: str) -> StokerCloudSensorDescription:
+    return StokerCloudSensorDescription(
+        key=key,
+        name=key,
+        data_fn=lambda d: getattr(d.history, attr),
+        last_reset_fn=(lambda d: getattr(d.history, reset_attr)) if reset_attr else None,
+        device_class=SensorDeviceClass.WEIGHT,
+        state_class=SensorStateClass.TOTAL if reset_attr else None,
+        native_unit_of_measurement=UnitOfMass.KILOGRAMS,
+        suggested_display_precision=1,
+        icon=icon,
+    )
+
+
+HISTORY_SENSORS: tuple[StokerCloudSensorDescription, ...] = (
+    _kg_total("Consumption This Month", "this_month", "month_start", "mdi:calendar-month"),
+    _kg_total("Consumption Last Month", "last_month", None, "mdi:calendar-month-outline"),
+    _kg_total("Consumption This Year", "this_year", "year_start", "mdi:calendar"),
+    _kg_total("Consumption Last Year", "last_year", None, "mdi:calendar-blank-outline"),
+    StokerCloudSensorDescription(
+        key="Average Daily Consumption",
+        name="Average Daily Consumption",
+        data_fn=lambda d: round(d.history.avg_daily_7d, 2) if d.history.avg_daily_7d else None,
+        device_class=SensorDeviceClass.WEIGHT,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfMass.KILOGRAMS,
+        icon="mdi:chart-bar",
+    ),
+    StokerCloudSensorDescription(
+        key="Pellets Days Left",
+        name="Pellets Days Left",
+        data_fn=_days_left,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="d",
+        icon="mdi:calendar-clock",
+    ),
+)
+
 PELLET_ENERGY = SensorEntityDescription(
     key="Pellet Energy",
     name="Pellet Energy",
@@ -214,7 +264,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator = entry.runtime_data
-    descriptions = list(SENSORS)
+    descriptions = list(SENSORS) + list(HISTORY_SENSORS)
     for zone in _active_zones(coordinator.data.controller):
         descriptions.extend(_zone_sensors(zone))
     entities: list[SensorEntity] = [StokerCloudSensor(coordinator, d) for d in descriptions]
@@ -233,10 +283,20 @@ class StokerCloudSensor(StokerCloudEntity, SensorEntity):
 
     @property
     def native_value(self) -> Any:
-        value = self.entity_description.value_fn(self.coordinator.data.controller)
+        desc = self.entity_description
+        if desc.data_fn is not None:
+            value = desc.data_fn(self.coordinator.data)
+            return value if isinstance(value, (int, float)) else None
+        value = desc.value_fn(self.coordinator.data.controller)
         if self.entity_description.device_class == SensorDeviceClass.ENUM:
             return value
         return value if isinstance(value, (int, float)) else None
+
+    @property
+    def last_reset(self) -> datetime | None:
+        if self.entity_description.last_reset_fn is None:
+            return None
+        return self.entity_description.last_reset_fn(self.coordinator.data)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:

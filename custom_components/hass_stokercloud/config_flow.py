@@ -21,8 +21,14 @@ from stokercloud import Client, StokerCloudAuthError, StokerCloudError
 
 from .const import (
     CONF_CALORIFIC_VALUE,
+    CONF_FAST_UPDATES,
+    CONF_IMPORT_STATISTICS,
+    CONF_LOW_HOPPER_KG,
     CONF_SCAN_INTERVAL,
     DEFAULT_CALORIFIC_VALUE,
+    DEFAULT_FAST_UPDATES,
+    DEFAULT_IMPORT_STATISTICS,
+    DEFAULT_LOW_HOPPER_KG,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     MIN_SCAN_INTERVAL,
@@ -110,7 +116,7 @@ class StokerCloudConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class StokerCloudOptionsFlow(OptionsFlow):
-    """Update interval and pellet calorific value."""
+    """Polling, energy and hopper options."""
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -128,6 +134,18 @@ class StokerCloudOptionsFlow(OptionsFlow):
                     CONF_CALORIFIC_VALUE,
                     default=options.get(CONF_CALORIFIC_VALUE, DEFAULT_CALORIFIC_VALUE),
                 ): vol.All(vol.Coerce(float), vol.Range(min=1, max=10)),
+                vol.Required(
+                    CONF_FAST_UPDATES,
+                    default=options.get(CONF_FAST_UPDATES, DEFAULT_FAST_UPDATES),
+                ): bool,
+                vol.Required(
+                    CONF_LOW_HOPPER_KG,
+                    default=options.get(CONF_LOW_HOPPER_KG, DEFAULT_LOW_HOPPER_KG),
+                ): vol.All(vol.Coerce(int), vol.Range(min=0, max=5000)),
+                vol.Required(
+                    CONF_IMPORT_STATISTICS,
+                    default=options.get(CONF_IMPORT_STATISTICS, DEFAULT_IMPORT_STATISTICS),
+                ): bool,
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)

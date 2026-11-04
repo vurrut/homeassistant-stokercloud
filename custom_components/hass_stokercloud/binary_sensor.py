@@ -13,9 +13,12 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from stokercloud import ControllerData, PowerState
+from typing import Any
 
-from .coordinator import StokerCloudConfigEntry
+from stokercloud import ControllerData, PowerState, Unit, Value
+
+from .const import CONF_LOW_HOPPER_KG, DEFAULT_LOW_HOPPER_KG
+from .coordinator import StokerCloudConfigEntry, StokerCloudCoordinator
 from .entity import StokerCloudEntity
 
 
@@ -71,7 +74,17 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator = entry.runtime_data
-    async_add_entities(StokerCloudBinarySensor(coordinator, d) for d in BINARY_SENSORS)
+    entities: list[BinarySensorEntity] = [
+        StokerCloudBinarySensor(coordinator, d) for d in BINARY_SENSORS
+    ]
+    entities.append(
+        StokerCloudHopperLowSensor(
+            coordinator,
+            HOPPER_LOW,
+            entry.options.get(CONF_LOW_HOPPER_KG, DEFAULT_LOW_HOPPER_KG),
+        )
+    )
+    async_add_entities(entities)
 
 
 class StokerCloudBinarySensor(StokerCloudEntity, BinarySensorEntity):
@@ -86,3 +99,57 @@ class StokerCloudBinarySensor(StokerCloudEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool | None:
         return self.entity_description.is_on_fn(self.coordinator.data.controller)
+
+
+HOPPER_LOW = BinarySensorEntityDescription(
+    key="Hopper Low",
+    name="Hopper Low",
+    device_class=BinarySensorDeviceClass.PROBLEM,
+    icon="mdi:silo-outline",
+)
+
+
+def _float(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+class StokerCloudHopperLowSensor(StokerCloudEntity, BinarySensorEntity):
+    """On when the hopper is nearly empty.
+
+    Uses the tracked hopper content (kg) when it is set (>= 0); otherwise the
+    hopper distance sensor in % against the controller's own warning level
+    (``hopper.distwarn``). Unknown when neither is available.
+    """
+
+    def __init__(
+        self,
+        coordinator: StokerCloudCoordinator,
+        description: BinarySensorEntityDescription,
+        threshold_kg: float,
+    ) -> None:
+        super().__init__(coordinator, description)
+        self._threshold_kg = threshold_kg
+
+    def _threshold(self) -> float:
+        controller_min = _float((self.coordinator.data.setting("hopper.min_content") or {}).get("val"))
+        return max(self._threshold_kg, controller_min or 0)
+
+    @property
+    def is_on(self) -> bool | None:
+        data = self.coordinator.data
+        content = data.controller.hoppercontent
+        if isinstance(content, Value) and isinstance(content.value, (int, float)) and content.value >= 0:
+            return content.value <= self._threshold()
+        sensor_on = str((data.setting("hopper.distance_sensor") or {}).get("val", "0")) not in ("0", "")
+        level = data.controller.hopper_level
+        warn = _float((data.setting("hopper.distwarn") or {}).get("val"))
+        if sensor_on and isinstance(level, Value) and level.unit is Unit.PERCENT and warn is not None:
+            return float(level.value) <= warn
+        return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"threshold_kg": self._threshold()}

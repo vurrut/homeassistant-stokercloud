@@ -12,7 +12,7 @@ from homeassistant.components.number import (
     NumberEntityDescription,
     NumberMode,
 )
-from homeassistant.const import EntityCategory, UnitOfMass, UnitOfTemperature
+from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfMass, UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -80,13 +80,56 @@ NUMBERS: tuple[StokerCloudNumberDescription, ...] = (
 )
 
 
+@dataclass(frozen=True, kw_only=True)
+class StokerCloudSettingDescription(NumberEntityDescription):
+    """A controller setting read from (and written to) the settings menus."""
+
+    setting: str
+
+
+def _adv(key: str, setting: str, unit: str | None, icon: str) -> StokerCloudSettingDescription:
+    return StokerCloudSettingDescription(
+        key=key,
+        name=key,
+        setting=setting,
+        native_unit_of_measurement=unit,
+        device_class=NumberDeviceClass.TEMPERATURE if unit == UnitOfTemperature.CELSIUS else None,
+        mode=NumberMode.BOX,
+        entity_category=EntityCategory.CONFIG,
+        entity_registry_enabled_default=False,
+        icon=icon,
+    )
+
+
+ADVANCED: tuple[StokerCloudSettingDescription, ...] = (
+    _adv("Boiler Start Difference", "boiler.diff_under", UnitOfTemperature.CELSIUS, "mdi:thermometer-chevron-down"),
+    _adv("Boiler Stop Difference", "boiler.diff_over", UnitOfTemperature.CELSIUS, "mdi:thermometer-chevron-up"),
+    _adv("Minimum Return Temperature", "boiler.min_return", UnitOfTemperature.CELSIUS, "mdi:thermometer-low"),
+    _adv("Boiler Temperature Reduction", "boiler.reduction", UnitOfTemperature.CELSIUS, "mdi:thermometer-minus"),
+    _adv("DHW Start Difference", "hot_water.diff_under", UnitOfTemperature.CELSIUS, "mdi:water-thermometer"),
+    _adv("Boiler Minimum Power", "regulation.boiler_power_min", PERCENTAGE, "mdi:fire"),
+    _adv("Boiler Maximum Power", "regulation.boiler_power_max", PERCENTAGE, "mdi:fire"),
+    _adv("DHW Minimum Power", "regulation.dhw_power_min", PERCENTAGE, "mdi:fire"),
+    _adv("DHW Maximum Power", "regulation.dhw_power_max", PERCENTAGE, "mdi:fire"),
+    _adv("O2 Target Low Power", "oxygen.o2_low", PERCENTAGE, "mdi:molecule"),
+    _adv("O2 Target Medium Power", "oxygen.o2_medium", PERCENTAGE, "mdi:molecule"),
+    _adv("O2 Target High Power", "oxygen.o2_high", PERCENTAGE, "mdi:molecule"),
+)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: StokerCloudConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator = entry.runtime_data
-    async_add_entities(StokerCloudNumber(coordinator, d) for d in NUMBERS)
+    entities: list[NumberEntity] = [StokerCloudNumber(coordinator, d) for d in NUMBERS]
+    entities.extend(
+        StokerCloudSettingNumber(coordinator, d)
+        for d in ADVANCED
+        if coordinator.data.setting(d.setting) is not None
+    )
+    async_add_entities(entities)
 
 
 def _num(value: Any) -> float | None:
@@ -146,6 +189,58 @@ class StokerCloudNumber(StokerCloudEntity, NumberEntity):
         value = float(round(value))
         await self.coordinator.async_write(
             lambda: self.entity_description.set_fn(self.coordinator.client, value),
+            f"Setting {self.entity_description.setting} to {value:g}",
+        )
+        self._pending = value
+        self._pending_until = time.monotonic() + OPTIMISTIC_SECONDS
+        self.async_write_ha_state()
+
+
+class StokerCloudSettingNumber(StokerCloudEntity, NumberEntity):
+    """Advanced controller setting; disabled by default."""
+
+    entity_description: StokerCloudSettingDescription
+    _pending: float | None = None
+    _pending_until = 0.0
+
+    def _setting(self) -> dict[str, Any]:
+        return self.coordinator.data.setting(self.entity_description.setting) or {}
+
+    @property
+    def available(self) -> bool:
+        return super().available and bool(self._setting())
+
+    @property
+    def native_min_value(self) -> float:
+        return _num(self._setting().get("min")) or 0
+
+    @property
+    def native_max_value(self) -> float:
+        return _num(self._setting().get("max")) or 100
+
+    @property
+    def native_step(self) -> float:
+        factor = _num(self._setting().get("factor")) or 1
+        return 1 / factor if factor > 1 else 1
+
+    @property
+    def native_value(self) -> float | None:
+        if self._pending is not None:
+            return self._pending
+        return _num(self._setting().get("val"))
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        if self._pending is not None:
+            if _num(self._setting().get("val")) == self._pending or time.monotonic() > self._pending_until:
+                self._pending = None
+        super()._handle_coordinator_update()
+
+    async def async_set_native_value(self, value: float) -> None:
+        step = self.native_step
+        value = round(round(value / step) * step, 2)
+        await self.coordinator.async_write(
+            lambda: self.coordinator.client.async_set_value(self.entity_description.setting, value),
             f"Setting {self.entity_description.setting} to {value:g}",
         )
         self._pending = value

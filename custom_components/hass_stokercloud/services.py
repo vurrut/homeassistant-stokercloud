@@ -11,7 +11,7 @@ from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 
 from .const import DOMAIN
-from .coordinator import StokerCloudCoordinator
+from .coordinator import MENUS, StokerCloudCoordinator
 
 SERVICE_SET_VALUE = "set_value"
 ATTR_CONFIG_ENTRY = "config_entry_id"
@@ -54,7 +54,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
         # Validate against the limits the controller reports, when we have them.
         menu = setting.split(".", 1)[0]
         limits = coordinator.data.setting(setting)
-        if limits is None and menu not in ("boiler", "hot_water", "hopper"):
+        if limits is None and menu not in MENUS:
             try:
                 limits = (await coordinator.client.async_get_menu(menu)).get(setting)
             except Exception:  # noqa: BLE001 - validation is best effort

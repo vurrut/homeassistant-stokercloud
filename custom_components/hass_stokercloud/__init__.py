@@ -12,7 +12,14 @@ from homeassistant.helpers.typing import ConfigType
 
 from stokercloud import Client, StokerCloudAuthError
 
-from .const import DOMAIN, PLATFORMS
+from .const import (
+    CONF_CALORIFIC_VALUE,
+    CONF_IMPORT_STATISTICS,
+    DEFAULT_CALORIFIC_VALUE,
+    DEFAULT_IMPORT_STATISTICS,
+    DOMAIN,
+    PLATFORMS,
+)
 from .coordinator import StokerCloudConfigEntry, StokerCloudCoordinator
 from .services import async_setup_services
 
@@ -44,6 +51,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: StokerCloudConfigEntry) 
         raise ConfigEntryAuthFailed(str(err)) from err
 
     coordinator = StokerCloudCoordinator(hass, entry, client)
+    if (
+        entry.options.get(CONF_IMPORT_STATISTICS, DEFAULT_IMPORT_STATISTICS)
+        and "recorder" in hass.config.components
+    ):
+        from .statistics import StatisticsImporter  # noqa: PLC0415 - needs recorder
+
+        importer = StatisticsImporter(
+            hass,
+            entry.data[CONF_USERNAME],
+            entry.options.get(CONF_CALORIFIC_VALUE, DEFAULT_CALORIFIC_VALUE),
+        )
+        coordinator.history_listeners.append(importer.async_import)
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
 

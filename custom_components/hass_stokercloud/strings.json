@@ -33,11 +33,17 @@
         "title": "NBE StokerCloud options",
         "data": {
           "scan_interval": "Update interval (seconds)",
-          "calorific_value": "Pellet calorific value (kWh/kg)"
+          "calorific_value": "Pellet calorific value (kWh/kg)",
+          "fast_updates": "Fast updates",
+          "low_hopper_kg": "Low hopper threshold (kg)",
+          "import_statistics": "Import consumption history into statistics"
         },
         "data_description": {
-          "scan_interval": "How often to poll StokerCloud. Minimum 30 seconds.",
-          "calorific_value": "Used for the Pellet Energy sensor. EN-plus wood pellets are about 4.8 kWh/kg."
+          "scan_interval": "Maximum time between full data fetches. Minimum 30 seconds.",
+          "calorific_value": "Used for the Pellet Energy sensor. EN-plus wood pellets are about 4.8 kWh/kg.",
+          "fast_updates": "Check every 10 seconds whether the boiler has sent new data, and fetch it right away. The controller reports about once a minute.",
+          "low_hopper_kg": "Hopper Low turns on at or below this amount when you track the hopper content.",
+          "import_statistics": "Adds pellet consumption (kg) and energy (kWh) history as long-term statistics, for the Energy dashboard."
         }
       }
     }

@@ -57,10 +57,12 @@ async def test_options_flow_reloads(hass: HomeAssistant, mock_client) -> None:
     entry = await _setup(hass)
     result = await hass.config_entries.options.async_init(entry.entry_id)
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"scan_interval": 120, "calorific_value": 4.5}
+        result["flow_id"],
+        {"scan_interval": 120, "calorific_value": 4.5, "fast_updates": False,
+         "low_hopper_kg": 80, "import_statistics": False},
     )
     await hass.async_block_till_done()
-    assert entry.options == {"scan_interval": 120, "calorific_value": 4.5}
+    assert entry.options["scan_interval"] == 120 and entry.options["low_hopper_kg"] == 80
     assert entry.runtime_data.update_interval.total_seconds() == 120
     assert float(hass.states.get("sensor.nbe_pellet_energy").state) == 10370 * 4.5
 
